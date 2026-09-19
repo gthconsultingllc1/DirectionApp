@@ -4,14 +4,11 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: Direction
+      app_store_connect: SolSync App Store Connect
     environment:
       ios_signing:
+        distribution_type: app_store
         bundle_identifier: com.gthconsulting.direction
-        provisioning_profiles:
-          - Direction_App_Store
-        certificates:
-          - Direction_Distribution
       vars:
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
