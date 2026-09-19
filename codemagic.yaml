@@ -1,0 +1,42 @@
+workflows:
+  ios-testflight:
+    name: Direction iOS TestFlight
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: Direction
+    environment:
+      ios_signing:
+        bundle_identifier: com.gthconsulting.direction
+        provisioning_profiles:
+          - Direction_App_Store
+        certificates:
+          - Direction_Distribution
+      vars:
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+      node: 20
+    scripts:
+      - name: Install npm deps
+        script: |
+          npm ci || npm install
+      - name: Add Capacitor iOS + sync
+        script: |
+          npm install @capacitor/ios@^7.4.3 --save
+          npx cap add ios || true
+          npx cap sync ios
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

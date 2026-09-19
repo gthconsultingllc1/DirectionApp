@@ -1,0 +1,15 @@
+node_modules/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+ios/App/Pods/
+ios/App/build/
+*.keystore
+*.jks
+*.aab
+*.ipa
+.idea/
+.DS_Store
+*.xcuserstate
+DerivedData/

@@ -1,0 +1,20 @@
+{
+  "name": "direction-native",
+  "version": "1.0.0",
+  "description": "Direction Android wrapper (Capacitor WebView)",
+  "private": true,
+  "scripts": {
+    "sync": "npx cap sync android",
+    "open": "npx cap open android",
+    "build:aab": "cd android && ./gradlew bundleRelease",
+    "build:apk": "cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/splash-screen": "^7.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "appId": "com.gthconsulting.direction",
+  "appName": "Direction",
+  "webDir": "www",
+  "server": {
+    "url": "https://direction.grok.me",
+    "allowNavigation": [
+      "direction.grok.me",
+      "*.direction.grok.me",
+      "mydirection.app",
+      "*.mydirection.app"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0a0a0a"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "launchAutoHide": true,
+      "backgroundColor": "#0a0a0a",
+      "showSpinner": false,
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}
