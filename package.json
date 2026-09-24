@@ -7,11 +7,13 @@
     "sync": "npx cap sync android",
     "open": "npx cap open android",
     "build:aab": "cd android && ./gradlew bundleRelease",
-    "build:apk": "cd android && ./gradlew assembleRelease"
+    "build:apk": "cd android && ./gradlew assembleRelease",
+    "ios:deployment-target": "node scripts/set-ios-deployment-target.js"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
     "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
     "@capacitor/splash-screen": "^7.0.3"
   },
   "devDependencies": {
