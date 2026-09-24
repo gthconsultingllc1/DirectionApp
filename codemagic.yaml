@@ -12,6 +12,9 @@ workflows:
       vars:
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
+        # ITMS-90068: App Store Connect requires iOS 15.0+ from April 2027.
+        # scripts/set-ios-deployment-target.js reads this and refuses values below 15.0.
+        IPHONEOS_DEPLOYMENT_TARGET: "15.0"
       node: 20
     scripts:
       - name: Install npm deps
@@ -21,7 +24,12 @@ workflows:
         script: |
           npm install @capacitor/ios@^7.4.3 --save
           npx cap add ios || true
+          # Template (and cap sync's pod install) must already be on iOS 15
+          # before CocoaPods writes Pods.xcodeproj. Re-apply after sync so a
+          # regenerated Podfile, pbxproj, or Info.plist cannot ship 14.0.
+          npm run ios:deployment-target
           npx cap sync ios
+          npm run ios:deployment-target
       - name: Set up code signing
         script: |
           xcode-project use-profiles
