@@ -8,7 +8,14 @@
       "direction.grok.me",
       "*.direction.grok.me",
       "mydirection.app",
-      "*.mydirection.app"
+      "*.mydirection.app",
+      "dbfmwkriziaqqmmetdar.supabase.co",
+      "*.supabase.co",
+      "accounts.google.com",
+      "*.google.com",
+      "*.googleusercontent.com",
+      "appleid.apple.com",
+      "*.apple.com"
     ]
   },
   "android": {
