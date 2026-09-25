@@ -8,7 +8,7 @@ Native Android shell that loads **https://direction.grok.me** in a fullscreen Ca
 | App label | Direction |
 | Capacitor | 7.x |
 | Web target | `https://direction.grok.me` |
-| Allowed nav | `direction.grok.me`, `mydirection.app` (+ wildcards) |
+| Allowed nav | Direction + mydirection.app, Supabase (`dbfmwkriziaqqmmetdar.supabase.co`, `*.supabase.co`), Google OAuth (`accounts.google.com`, `*.google.com`, `*.googleusercontent.com`), Sign in with Apple (`appleid.apple.com`, `*.apple.com`) |
 | Min / target SDK | 23 / 36 |
 | Release AAB | [`direction-release.aab`](./direction-release.aab) |
 
@@ -120,7 +120,7 @@ This repo does **not** upload to Play; leave the AAB for manual Console upload.
 - `appId`: `com.gthconsulting.direction`
 - `appName`: `Direction`
 - `server.url`: `https://direction.grok.me`
-- `server.allowNavigation`: Direction + mydirection.app hosts
+- `server.allowNavigation`: Direction + mydirection.app, plus the Supabase / Google / Apple hosts required for in-WebView OAuth
 - Dark splash via SplashScreen plugin + `#0a0a0a` background
 
 ## Project layout
