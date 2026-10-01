@@ -3,8 +3,9 @@
   "appName": "Direction",
   "webDir": "www",
   "server": {
-    "url": "https://direction.grok.me",
+    "url": "https://app.mydirection.app",
     "allowNavigation": [
+      "app.mydirection.app",
       "direction.grok.me",
       "*.direction.grok.me",
       "mydirection.app",

@@ -1,14 +1,14 @@
 # Direction — Capacitor Android wrapper
 
-Native Android shell that loads **https://direction.grok.me** in a fullscreen Capacitor WebView. Built for Google Play AAB upload.
+Native Android shell that loads **https://app.mydirection.app** in a fullscreen Capacitor WebView. Built for Google Play AAB upload.
 
 | Field | Value |
 |-------|--------|
 | Package / applicationId | `com.gthconsulting.direction` |
 | App label | Direction |
 | Capacitor | 7.x |
-| Web target | `https://direction.grok.me` |
-| Allowed nav | Direction + mydirection.app, Supabase (`dbfmwkriziaqqmmetdar.supabase.co`, `*.supabase.co`), Google OAuth (`accounts.google.com`, `*.google.com`, `*.googleusercontent.com`), Sign in with Apple (`appleid.apple.com`, `*.apple.com`) |
+| Web target | `https://app.mydirection.app` |
+| Allowed nav | `app.mydirection.app` + mydirection.app, temporary fallback `direction.grok.me`, Supabase (`mqwayjaefnygtjqgdwxq.supabase.co`, `*.supabase.co`), Google OAuth (`accounts.google.com`, `*.google.com`, `*.googleusercontent.com`), Sign in with Apple (`appleid.apple.com`, `*.apple.com`) |
 | Min / target SDK | 23 / 36 |
 | Release AAB | [`direction-release.aab`](./direction-release.aab) |
 
@@ -119,8 +119,8 @@ This repo does **not** upload to Play; leave the AAB for manual Console upload.
 
 - `appId`: `com.gthconsulting.direction`
 - `appName`: `Direction`
-- `server.url`: `https://direction.grok.me`
-- `server.allowNavigation`: Direction + mydirection.app, plus the Supabase / Google / Apple hosts required for in-WebView OAuth
+- `server.url`: `https://app.mydirection.app`
+- `server.allowNavigation`: `app.mydirection.app` and mydirection.app, `direction.grok.me` kept as a temporary fallback, plus the Supabase / Google / Apple hosts required for in-WebView OAuth
 - Dark splash via SplashScreen plugin + `#0a0a0a` background
 
 ## Project layout
