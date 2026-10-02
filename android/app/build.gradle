@@ -19,10 +19,20 @@ android {
     
     signingConfigs {
         release {
-            storeFile file("../direction-upload.keystore")
-            storePassword "DirectionUpload2026!"
-            keyAlias "direction-upload"
-            keyPassword "DirectionUpload2026!"
+            // Codemagic android_signing (reference direction_upload) exports these.
+            // Local bundleRelease keeps using android/direction-upload.keystore.
+            def cmKeystore = System.getenv("CM_KEYSTORE_PATH")
+            if (cmKeystore) {
+                storeFile file(cmKeystore)
+                storePassword System.getenv("CM_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("CM_KEY_ALIAS")
+                keyPassword System.getenv("CM_KEY_PASSWORD")
+            } else {
+                storeFile file("../direction-upload.keystore")
+                storePassword "DirectionUpload2026!"
+                keyAlias "direction-upload"
+                keyPassword "DirectionUpload2026!"
+            }
         }
     }
     buildTypes {

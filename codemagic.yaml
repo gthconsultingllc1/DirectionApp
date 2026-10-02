@@ -45,3 +45,35 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+
+  # Manual only: no triggering block, so merging does not start this build.
+  # Signs with the same upload keystore used for direction-release.aab /
+  # direction-release-v3.aab (alias direction-upload). Upload that file in
+  # Codemagic as Android keystore reference "direction_upload".
+  # Does not publish to Google Play.
+  android-closed-testing:
+    name: Direction Android closed testing
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      android_signing:
+        - direction_upload
+      java: 21
+      node: 20
+    scripts:
+      - name: Install npm deps
+        script: npm ci
+      - name: Sync Capacitor Android
+        script: npx cap sync android
+      - name: Point Gradle at the Android SDK
+        script: echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+      - name: Install Android SDK 36
+        script: |
+          yes | sdkmanager --licenses || true
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Build release AAB
+        script: |
+          cd android
+          ./gradlew bundleRelease --no-daemon
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab

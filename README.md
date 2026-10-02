@@ -104,7 +104,30 @@ Signed with the **upload keystore** at `android/direction-upload.keystore` (alia
 
 **Before treating this as production:** back up the keystore offline, store passwords in a secret manager, and consider regenerating if this machine or repo is shared. Losing the upload key complicates Play updates (Play App Signing still lets Google re-sign for devices, but you must prove ownership to reset the upload key).
 
-Signing is wired in `android/app/build.gradle` (`signingConfigs.release`).
+Signing is wired in `android/app/build.gradle` (`signingConfigs.release`). A local `bundleRelease` uses `android/direction-upload.keystore`. On Codemagic, the same block reads `CM_KEYSTORE_PATH`, `CM_KEYSTORE_PASSWORD`, `CM_KEY_ALIAS`, and `CM_KEY_PASSWORD` when that keystore is injected.
+
+## Codemagic Android closed testing
+
+`direction-release.aab` and `direction-release-v3.aab` (Play versionCode 3) were built on a machine that had `android/direction-upload.keystore`, with `./gradlew bundleRelease`. That keystore is gitignored, so this repo cannot sign a Play AAB by itself. Workflow `android-closed-testing` in `codemagic.yaml` repeats that local release build and signs with the same upload key. It has no `triggering` events, so it starts only when you start it. It does not upload to Play.
+
+Add the keystore once in Codemagic (Team settings → Code signing identities → Android keystores):
+
+| Codemagic field | Value |
+|-----------------|--------|
+| Reference name | `direction_upload` |
+| Keystore file | `android/direction-upload.keystore` (the file used for versionCode 3) |
+| Keystore password | same as the upload keystore table above |
+| Key alias | `direction-upload` |
+| Key password | same as the upload keystore table above |
+
+Start the versionCode 4 / versionName 1.1 closed-testing AAB:
+
+1. Codemagic → the Direction app → **Start new build**.
+2. Branch: `main`.
+3. Workflow: **Direction Android closed testing**.
+4. When the build finishes, download `app-release.aab` from the artifacts and upload it in Play Console → Closed testing.
+
+The AAB `versionCode` comes from `android/app/build.gradle` (currently 4). Do not let Codemagic bump it.
 
 ## One-time environment (this Linux box)
 
@@ -190,7 +213,8 @@ direction-native/
   capacitor.config.json
   package.json
   www/index.html          # offline/fallback UI
-  direction-release.aab   # upload-ready release bundle
+  direction-release.aab   # local upload-ready bundle (gitignored; not in CI)
+  codemagic.yaml          # ios-testflight + android-closed-testing
   android/                # Capacitor Android project
     direction-upload.keystore
     app/build.gradle      # applicationId + signing
