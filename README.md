@@ -12,7 +12,7 @@ Native Android shell that loads **https://app.mydirection.app** in a fullscreen 
 | Min / target SDK | 23 / 36 |
 | Release AAB | [`direction-release.aab`](./direction-release.aab) |
 | Android version | `versionName` 1.1 / `versionCode` 6 |
-| iOS version | marketing 1.1 / build 4 |
+| iOS version | marketing 1.1 / build 5 |
 
 ## Subscriptions (Play Billing + StoreKit)
 
@@ -70,7 +70,7 @@ async function whenDirectionIAP() {
 }
 ```
 
-After changing `www/direction-iap.js`, run `npx cap sync` so the script is copied into the Android and iOS bundles. Closed testing needs an AAB with `versionCode` 6 (`versionName` 1.1). Play already has versionCode 3, and it rejected a later upload because versionCode 4 already exists as versionName 1.0. Local AABs through v5 may have used versionCode 5, so the next upload is 6. TestFlight stays on iOS build 4 (marketing 1.1); that build was not started from this repo after it was set. In Play Console, license testers must install from the testing track. In App Store Connect, the In-App Purchase capability is recorded on the Xcode target; sign a sandbox tester in when the purchase sheet appears.
+After changing `www/direction-iap.js`, run `npx cap sync` so the script is copied into the Android and iOS bundles. Closed testing needs an AAB with `versionCode` 6 (`versionName` 1.1). Play already has versionCode 3, and it rejected a later upload because versionCode 4 already exists as versionName 1.0. Local AABs through v5 may have used versionCode 5, so the next upload is 6. TestFlight needs iOS build 5 (marketing 1.1). Build 4 reached App Store Connect, but submission failed on missing export compliance; `ITSAppUsesNonExemptEncryption` is false because Direction only uses exempt HTTPS. In Play Console, license testers must install from the testing track. In App Store Connect, the In-App Purchase capability is recorded on the Xcode target; sign a sandbox tester in when the purchase sheet appears.
 
 ## What this is
 
@@ -179,7 +179,7 @@ cd android && ./gradlew assembleRelease
 # → app/build/outputs/apk/release/app-release.apk
 ```
 
-Bump Play version: edit `versionCode` / `versionName` in `android/app/build.gradle` → `defaultConfig`. Current store upload is `versionName` 1.1 / `versionCode` 6. iOS marketing version and build are `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` (1.1 / 4).
+Bump Play version: edit `versionCode` / `versionName` in `android/app/build.gradle` → `defaultConfig`. Current store upload is `versionName` 1.1 / `versionCode` 6. iOS marketing version and build are `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` (1.1 / 5). `ios/App/App/Info.plist` sets `ITSAppUsesNonExemptEncryption` to false.
 
 ## Google Play upload notes
 
