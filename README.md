@@ -11,8 +11,8 @@ Native Android shell that loads **https://app.mydirection.app** in a fullscreen 
 | Allowed nav | `app.mydirection.app` + mydirection.app, temporary fallback `direction.grok.me`, Supabase (`mqwayjaefnygtjqgdwxq.supabase.co`, `*.supabase.co`), Google OAuth (`accounts.google.com`, `*.google.com`, `*.googleusercontent.com`), Sign in with Apple (`appleid.apple.com`, `*.apple.com`) |
 | Min / target SDK | 23 / 36 |
 | Release AAB | [`direction-release.aab`](./direction-release.aab) |
-| Android version | `versionName` 1.1 / `versionCode` 3 |
-| iOS version | marketing 1.1 / build 3 |
+| Android version | `versionName` 1.1 / `versionCode` 4 |
+| iOS version | marketing 1.1 / build 4 |
 
 ## Subscriptions (Play Billing + StoreKit)
 
@@ -70,7 +70,7 @@ async function whenDirectionIAP() {
 }
 ```
 
-After changing `www/direction-iap.js`, run `npx cap sync` so the script is copied into the Android and iOS bundles. Closed testing needs an AAB with `versionCode` 3. TestFlight needs iOS build 3. In Play Console, license testers must install from the testing track. In App Store Connect, the In-App Purchase capability is recorded on the Xcode target; sign a sandbox tester in when the purchase sheet appears.
+After changing `www/direction-iap.js`, run `npx cap sync` so the script is copied into the Android and iOS bundles. Closed testing needs an AAB with `versionCode` 4 (`versionName` 1.1). TestFlight needs iOS build 4 (marketing 1.1). Play already accepted an earlier AAB at versionCode 3, so that code cannot be uploaded again. In Play Console, license testers must install from the testing track. In App Store Connect, the In-App Purchase capability is recorded on the Xcode target; sign a sandbox tester in when the purchase sheet appears.
 
 ## What this is
 
@@ -156,7 +156,7 @@ cd android && ./gradlew assembleRelease
 # → app/build/outputs/apk/release/app-release.apk
 ```
 
-Bump Play version: edit `versionCode` / `versionName` in `android/app/build.gradle` → `defaultConfig`. Current store upload is `versionName` 1.1 / `versionCode` 3. iOS marketing version and build are `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` (1.1 / 3).
+Bump Play version: edit `versionCode` / `versionName` in `android/app/build.gradle` → `defaultConfig`. Current store upload is `versionName` 1.1 / `versionCode` 4. iOS marketing version and build are `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` (1.1 / 4).
 
 ## Google Play upload notes
 
