@@ -8,11 +8,11 @@ Native Android shell that loads **https://app.mydirection.app** in a fullscreen 
 | App label | Direction |
 | Capacitor | 7.x |
 | Web target | `https://app.mydirection.app` |
-| Allowed nav | `app.mydirection.app` + mydirection.app, temporary fallback `direction.grok.me`, Supabase (`mqwayjaefnygtjqgdwxq.supabase.co`, `*.supabase.co`), Google OAuth (`accounts.google.com`, `*.google.com`, `*.googleusercontent.com`), Sign in with Apple (`appleid.apple.com`, `*.apple.com`) |
+| Allowed nav | `app.mydirection.app` + mydirection.app, Supabase (`mqwayjaefnygtjqgdwxq.supabase.co`, `*.supabase.co`), Google OAuth (`accounts.google.com`, `*.google.com`, `*.googleusercontent.com`), Sign in with Apple (`appleid.apple.com`, `*.apple.com`) |
 | Min / target SDK | 23 / 36 |
 | Release AAB | [`direction-release.aab`](./direction-release.aab) |
-| Android version | `versionName` 1.1 / `versionCode` 6 |
-| iOS version | marketing 1.1 / build 5 |
+| Android version | `versionName` 1.1 / `versionCode` 7 |
+| iOS version | marketing 1.1 / build 6 |
 
 ## Subscriptions (Play Billing + StoreKit)
 
@@ -22,20 +22,22 @@ The native shell sells Direction Premium. The remote SPA is not bundled with a b
 |--|---------|--------|
 | Product ID (Play and App Store) | `direction_premium_monthly` | `direction_premium_yearly` |
 | Play base plan ID | `monthly` | `yearly` |
-| Play offer ID | `trial-7-days` (7-day free trial) | `trial-7-days` (7-day free trial) |
-| App Store | $9.99/mo + 1-week introductory offer | $59.99/yr + 1-week introductory offer |
+| Play offer ID | `trial-7-days` (7-day trial) | `trial-7-days` (7-day trial) |
+| Catalog price when the store has not returned one | $9.99/month | $59.99/year |
 
 Plugin: [`@capgo/native-purchases@7.19.2`](https://github.com/Cap-go/capacitor-native-purchases) (Capacitor 7, Play Billing 8, StoreKit 2). `npm install` patches Android offer selection so an eligible `trial-7-days` offer is purchased, and so cancel / already-owned / other billing results come back as stable error codes. StoreKit applies the introductory offer on its own; pass `planIdentifier` only because Play requires the base plan id.
 
-Show prices from `getProducts()`. Apple reviews the paywall against `products[].priceString`.
+Show the paywall from `formatPaywall(products)`. The card and the fine print both use `priceLine`, so they cannot disagree. That line is the store's recurring price plus `/month` or `/year`. A 7-day trial is included only when `hasFreeTrial` is true. If the store has not returned a price, the same helper uses `$9.99/month` and `$59.99/year`.
 
 ```javascript
 const iap = window.DirectionIAP;
 if (!iap) throw new Error('Open Direction from the iOS or Android app');
 
 const { products } = await iap.getProducts(); // same payload as getOfferings()
-// products[].priceString is the localized recurring price
-// products[].hasFreeTrial is true when Play returned trial-7-days for this user
+const paywall = iap.formatPaywall(products);
+// paywall.monthly.priceLine and paywall.monthly.disclosure share one price string
+// paywall.yearly.priceLine is the yearly string
+// paywall.webMessage is the catalog sentence: $9.99/month or $59.99/year, each with a 7-day trial
 
 const monthly = await iap.purchaseMonthly();
 const yearly = await iap.purchase('direction_premium_yearly');
@@ -70,7 +72,7 @@ async function whenDirectionIAP() {
 }
 ```
 
-After changing `www/direction-iap.js`, run `npx cap sync` so the script is copied into the Android and iOS bundles. Closed testing needs an AAB with `versionCode` 6 (`versionName` 1.1). Play already has versionCode 3, and it rejected a later upload because versionCode 4 already exists as versionName 1.0. Local AABs through v5 may have used versionCode 5, so the next upload is 6. TestFlight needs iOS build 5 (marketing 1.1). Build 4 reached App Store Connect, but submission failed on missing export compliance; `ITSAppUsesNonExemptEncryption` is false because Direction only uses exempt HTTPS. In Play Console, license testers must install from the testing track. In App Store Connect, the In-App Purchase capability is recorded on the Xcode target; sign a sandbox tester in when the purchase sheet appears.
+After changing `www/direction-iap.js`, run `npx cap sync` so the script is copied into the Android and iOS bundles. The projects currently set Android `versionCode` 7 (`versionName` 1.1) and iOS build 6 (marketing 1.1). Play already used versionCode 3, rejected a later upload because versionCode 4 existed as versionName 1.0, and the repo has since moved to 7. The next store upload must be higher than whatever Play and App Store Connect already show. `ITSAppUsesNonExemptEncryption` is false because Direction only uses exempt HTTPS. In Play Console, license testers must install from the testing track. In App Store Connect, the In-App Purchase capability is recorded on the Xcode target; sign a sandbox tester in when the purchase sheet appears.
 
 ## What this is
 
@@ -92,19 +94,22 @@ Also available at the Gradle output path:
 android/app/build/outputs/bundle/release/app-release.aab
 ```
 
-Signed with the **upload keystore** at `android/direction-upload.keystore` (alias `direction-upload`). Ready to upload to Play Console with Play App Signing enabled (recommended).
+Release AABs are signed with the upload keystore. The keystore file stays out of git (`*.keystore` is ignored). Passwords are not in this repo.
 
-### Upload keystore (keep private)
+A password used to be committed in `android/app/build.gradle` and this README. It is still in git history. Treat that upload key as exposed and decide in Play Console whether to reset it. This change does not rewrite history.
 
-| | |
-|--|--|
-| File | `android/direction-upload.keystore` |
-| Alias | `direction-upload` |
-| Store / key password | `DirectionUpload2026!` |
+### Release signing variables
 
-**Before treating this as production:** back up the keystore offline, store passwords in a secret manager, and consider regenerating if this machine or repo is shared. Losing the upload key complicates Play updates (Play App Signing still lets Google re-sign for devices, but you must prove ownership to reset the upload key).
+`android/app/build.gradle` reads the first non-empty value of each pair from the environment or from a Gradle property (`~/.gradle/gradle.properties` or `android/gradle.properties`, neither of which should be committed). `bundleRelease` and `assembleRelease` fail if the set is incomplete.
 
-Signing is wired in `android/app/build.gradle` (`signingConfigs.release`). A local `bundleRelease` uses `android/direction-upload.keystore`. On Codemagic, the same block reads `CM_KEYSTORE_PATH`, `CM_KEYSTORE_PASSWORD`, `CM_KEY_ALIAS`, and `CM_KEY_PASSWORD` when that keystore is injected.
+| Purpose | Codemagic (`android_signing` reference `direction_upload`) | Local env or Gradle property |
+|--|--|--|
+| Keystore file | `CM_KEYSTORE_PATH` | `DIRECTION_KEYSTORE_PATH` |
+| Keystore password | `CM_KEYSTORE_PASSWORD` | `DIRECTION_KEYSTORE_PASSWORD` |
+| Key alias | `CM_KEY_ALIAS` | `DIRECTION_KEY_ALIAS` |
+| Key password | `CM_KEY_PASSWORD` | `DIRECTION_KEY_PASSWORD` |
+
+Codemagic injects the `CM_*` variables when the Android keystore reference `direction_upload` is selected. Put the keystore file and passwords in Codemagic, not in git.
 
 ## Codemagic Android closed testing
 
@@ -115,19 +120,19 @@ Add the keystore once in Codemagic (Team settings → Code signing identities �
 | Codemagic field | Value |
 |-----------------|--------|
 | Reference name | `direction_upload` |
-| Keystore file | `android/direction-upload.keystore` (the file used for versionCode 3) |
-| Keystore password | same as the upload keystore table above |
-| Key alias | `direction-upload` |
-| Key password | same as the upload keystore table above |
+| Keystore file | the upload keystore used for earlier Play uploads (not committed) |
+| Keystore password | stored only in Codemagic, exported as `CM_KEYSTORE_PASSWORD` |
+| Key alias | stored only in Codemagic, exported as `CM_KEY_ALIAS` |
+| Key password | stored only in Codemagic, exported as `CM_KEY_PASSWORD` |
 
-Start the versionCode 6 / versionName 1.1 closed-testing AAB:
+Start the versionCode 7 / versionName 1.1 closed-testing AAB:
 
 1. Codemagic → the Direction app → **Start new build**.
 2. Branch: `main`.
 3. Workflow: **Direction Android closed testing**.
 4. When the build finishes, download `app-release.aab` from the artifacts and upload it in Play Console → Closed testing.
 
-The AAB `versionCode` comes from `android/app/build.gradle` (currently 6). Do not let Codemagic bump it.
+The AAB `versionCode` comes from `android/app/build.gradle` (currently 7). Do not let Codemagic bump it.
 
 ## One-time environment (this Linux box)
 
@@ -179,7 +184,7 @@ cd android && ./gradlew assembleRelease
 # → app/build/outputs/apk/release/app-release.apk
 ```
 
-Bump Play version: edit `versionCode` / `versionName` in `android/app/build.gradle` → `defaultConfig`. Current store upload is `versionName` 1.1 / `versionCode` 6. iOS marketing version and build are `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` (1.1 / 5). `ios/App/App/Info.plist` sets `ITSAppUsesNonExemptEncryption` to false.
+Bump Play version: edit `versionCode` / `versionName` in `android/app/build.gradle` → `defaultConfig`. The project is `versionName` 1.1 / `versionCode` 7. iOS marketing version and build are `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` (1.1 / 6). `ios/App/App/Info.plist` sets `ITSAppUsesNonExemptEncryption` to false and `NSMicrophoneUsageDescription`. `ios/App/App/PrivacyInfo.xcprivacy` declares email, audio, and purchase history, with tracking off.
 
 ## Google Play upload notes
 
@@ -203,7 +208,7 @@ This repo does **not** upload to Play; leave the AAB for manual Console upload.
 - `appId`: `com.gthconsulting.direction`
 - `appName`: `Direction`
 - `server.url`: `https://app.mydirection.app`
-- `server.allowNavigation`: `app.mydirection.app` and mydirection.app, `direction.grok.me` kept as a temporary fallback, plus the Supabase / Google / Apple hosts required for in-WebView OAuth
+- `server.allowNavigation`: `app.mydirection.app` and mydirection.app, plus the Supabase / Google / Apple hosts required for in-WebView OAuth
 - Dark splash via SplashScreen plugin + `#0a0a0a` background
 
 ## Project layout

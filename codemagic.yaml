@@ -4,6 +4,9 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
+      # This integration name is the Codemagic App Store Connect key. It must be
+      # a key for the Apple team that owns com.gthconsulting.direction.
+      # Renaming it here without updating Codemagic will fail the next iOS build.
       app_store_connect: SolSync App Store Connect
     environment:
       ios_signing:
@@ -22,8 +25,8 @@ workflows:
           npm ci || npm install
       - name: Add Capacitor iOS + sync
         script: |
-          npm install @capacitor/ios@^7.4.3 --save
-          npx cap add ios || true
+          # ios/ is already in git. Do not run `cap add ios`; it can replace
+          # DirectionBridgeViewController with the Capacitor template.
           # Template (and cap sync's pod install) must already be on iOS 15
           # before CocoaPods writes Pods.xcodeproj. Re-apply after sync so a
           # regenerated Podfile, pbxproj, or Info.plist cannot ship 14.0.

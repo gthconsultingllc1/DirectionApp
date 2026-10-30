@@ -17,30 +17,63 @@ android {
         }
     }
     
+    def firstSet = { names ->
+        def found = null
+        names.each { name ->
+            if (found == null) {
+                def env = System.getenv(name)
+                if (env != null && env.trim()) {
+                    found = env.trim()
+                } else {
+                    def prop = project.findProperty(name)
+                    if (prop != null && prop.toString().trim()) {
+                        found = prop.toString().trim()
+                    }
+                }
+            }
+        }
+        return found
+    }
+    def keystorePath = firstSet(["CM_KEYSTORE_PATH", "DIRECTION_KEYSTORE_PATH"])
+    def keystorePassword = firstSet(["CM_KEYSTORE_PASSWORD", "DIRECTION_KEYSTORE_PASSWORD"])
+    def keyAliasValue = firstSet(["CM_KEY_ALIAS", "DIRECTION_KEY_ALIAS"])
+    def keyPasswordValue = firstSet(["CM_KEY_PASSWORD", "DIRECTION_KEY_PASSWORD"])
+
     signingConfigs {
         release {
-            // Codemagic android_signing (reference direction_upload) exports these.
-            // Local bundleRelease keeps using android/direction-upload.keystore.
-            def cmKeystore = System.getenv("CM_KEYSTORE_PATH")
-            if (cmKeystore) {
-                storeFile file(cmKeystore)
-                storePassword System.getenv("CM_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("CM_KEY_ALIAS")
-                keyPassword System.getenv("CM_KEY_PASSWORD")
-            } else {
-                storeFile file("../direction-upload.keystore")
-                storePassword "DirectionUpload2026!"
-                keyAlias "direction-upload"
-                keyPassword "DirectionUpload2026!"
+            // Passwords are never stored in this file. Codemagic android_signing
+            // injects CM_KEYSTORE_*. Local release builds use DIRECTION_KEYSTORE_*
+            // from the environment or ~/.gradle/gradle.properties.
+            if (keystorePath && keystorePassword && keyAliasValue && keyPasswordValue) {
+                storeFile file(keystorePath)
+                storePassword keystorePassword
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue
             }
         }
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            if (signingConfigs.release.storeFile) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def releasing = graph.allTasks.any { task ->
+        task.project == project && (task.name == "bundleRelease" || task.name == "assembleRelease")
+    }
+    if (releasing && !android.signingConfigs.release.storeFile) {
+        throw new GradleException(
+            "Release signing is not configured. Set CM_KEYSTORE_PATH, CM_KEYSTORE_PASSWORD, " +
+            "CM_KEY_ALIAS, and CM_KEY_PASSWORD (Codemagic android_signing reference direction_upload), " +
+            "or DIRECTION_KEYSTORE_PATH, DIRECTION_KEYSTORE_PASSWORD, DIRECTION_KEY_ALIAS, and " +
+            "DIRECTION_KEY_PASSWORD as environment variables or Gradle properties. Do not commit passwords."
+        )
     }
 }
 

@@ -63,8 +63,7 @@ public class MainActivity extends BridgeActivity {
         Set<String> origins = new HashSet<>(
             Arrays.asList(
                 "https://app.mydirection.app",
-                "https://mydirection.app",
-                "https://direction.grok.me"
+                "https://mydirection.app"
             )
         );
         try {

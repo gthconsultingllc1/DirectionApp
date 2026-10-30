@@ -10,6 +10,7 @@
     "build:aab": "cd android && ./gradlew bundleRelease",
     "build:apk": "cd android && ./gradlew assembleRelease",
     "ios:deployment-target": "node scripts/set-ios-deployment-target.js",
+    "lint": "node --check www/direction-iap.js && node --check scripts/patch-native-purchases.js && node --check scripts/set-ios-deployment-target.js && node --check test/direction-iap.test.js",
     "test": "node --test test/direction-iap.test.js"
   },
   "dependencies": {
