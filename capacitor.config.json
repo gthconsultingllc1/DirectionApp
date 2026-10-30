@@ -6,8 +6,6 @@
     "url": "https://app.mydirection.app",
     "allowNavigation": [
       "app.mydirection.app",
-      "direction.grok.me",
-      "*.direction.grok.me",
       "mydirection.app",
       "*.mydirection.app",
       "mqwayjaefnygtjqgdwxq.supabase.co",

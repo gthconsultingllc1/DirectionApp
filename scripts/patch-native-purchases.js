@@ -33,13 +33,6 @@ if (!fs.existsSync(target)) {
 }
 
 const original = fs.readFileSync(target, 'utf8');
-if (
-  original.includes('DIRECTION_OFFER_SELECTION') &&
-  original.includes('DIRECTION_BILLING_ERROR')
-) {
-  console.log('patch-native-purchases: already patched');
-  process.exit(0);
-}
 
 function replaceOnce(source, oldText, newText, label) {
   const count = source.split(oldText).length - 1;
@@ -142,6 +135,9 @@ const helper = `
 `;
 
 let next = original;
+const offerSelectionAlreadyPatched =
+  next.includes('DIRECTION_OFFER_SELECTION') && next.includes('DIRECTION_BILLING_ERROR');
+if (!offerSelectionAlreadyPatched) {
 next = replaceOnce(
   next,
   '        String planIdentifier = call.getString("planIdentifier");\n        String productType = call.getString("productType", "inapp");',
@@ -233,6 +229,225 @@ next = replaceOnce(
 if (!next.includes('DIRECTION_OFFER_SELECTION') || !next.includes('DIRECTION_BILLING_ERROR')) {
   console.error('patch-native-purchases: markers missing after patch');
   process.exit(1);
+}
+}
+
+const recurringHelper = `
+    // DIRECTION_RECURRING_PRICE
+    private void putDirectionSubscriptionPrice(JSObject product, ProductDetails.SubscriptionOfferDetails offer) {
+        List<ProductDetails.PricingPhase> phases = offer.getPricingPhases().getPricingPhaseList();
+        ProductDetails.PricingPhase first = phases.get(0);
+        ProductDetails.PricingPhase recurring = null;
+        for (ProductDetails.PricingPhase phase : phases) {
+            if (phase.getPriceAmountMicros() > 0L) {
+                recurring = phase;
+            }
+        }
+        if (recurring == null) {
+            recurring = first;
+        }
+        double recurringAmount = recurring.getPriceAmountMicros() / 1000000.0;
+        product.put("price", recurringAmount);
+        product.put("priceString", recurring.getFormattedPrice());
+        product.put("currencyCode", recurring.getPriceCurrencyCode());
+        product.put("billingPeriod", recurring.getBillingPeriod());
+        product.put("recurringPrice", recurringAmount);
+        product.put("recurringPriceString", recurring.getFormattedPrice());
+        product.put("recurringCurrencyCode", recurring.getPriceCurrencyCode());
+        boolean freeTrialPhase = first.getPriceAmountMicros() == 0L && phases.size() > 1;
+        product.put("freeTrialPhase", freeTrialPhase);
+        if (freeTrialPhase) {
+            product.put("introductoryPrice", first.getFormattedPrice());
+            product.put("introductoryPriceMicros", first.getPriceAmountMicros());
+            product.put("introductoryBillingPeriod", first.getBillingPeriod());
+        }
+    }
+
+`;
+
+if (!next.includes('DIRECTION_RECURRING_PRICE')) {
+  const purchaseAnchor = '    @PluginMethod\n    public void purchaseProduct(PluginCall call) {';
+  if (!next.includes(purchaseAnchor)) {
+    console.error('patch-native-purchases: purchaseProduct anchor missing');
+    process.exit(1);
+  }
+  next = next.replace(purchaseAnchor, recurringHelper + purchaseAnchor);
+  next = replaceOnce(
+    next,
+    `                            double price = firstPricingPhase.getPriceAmountMicros() / 1000000.0;
+                            product.put("price", price);
+                            product.put("priceString", firstPricingPhase.getFormattedPrice());
+                            product.put("currencyCode", firstPricingPhase.getPriceCurrencyCode());`,
+    '                            putDirectionSubscriptionPrice(product, selectedOfferDetails);',
+    'single product recurring price',
+  );
+  next = replaceOnce(
+    next,
+    `                                    double price = firstPricingPhase.getPriceAmountMicros() / 1000000.0;
+                                    product.put("price", price);
+                                    product.put("priceString", firstPricingPhase.getFormattedPrice());
+                                    product.put("currencyCode", firstPricingPhase.getPriceCurrencyCode());`,
+    '                                    putDirectionSubscriptionPrice(product, offerDetails);',
+    'product list recurring price',
+  );
+}
+
+if (!next.includes('DIRECTION_LOG_REDACTION')) {
+  const beforeLogs = next;
+  next = next.replace(
+    'Log.d(TAG, "Purchase details: " + purchase.toString());',
+    'Log.d(TAG, "Purchase details: [redacted]"); // DIRECTION_LOG_REDACTION',
+  );
+  next = next.replace(
+    'Log.i(NativePurchasesPlugin.TAG, "handlePurchase" + purchase);',
+    'Log.i(NativePurchasesPlugin.TAG, "handlePurchase");',
+  );
+  next = next.replace(
+    'Log.d(TAG, "Purchase token: " + purchase.getPurchaseToken());',
+    'Log.d(TAG, "Purchase token: [redacted]");',
+  );
+  next = next.replace(
+    'Log.d(TAG, "Purchase token: " + purchaseToken);',
+    'Log.d(TAG, "Purchase token: [redacted]");',
+  );
+  next = next.replace(
+    'Log.i(NativePurchasesPlugin.TAG, "onConsumeResponse OK " + billingResult + purchaseToken);',
+    'Log.i(NativePurchasesPlugin.TAG, "onConsumeResponse OK " + billingResult.getResponseCode());',
+  );
+  next = next.replace(
+    'Log.d(TAG, "Resolving purchase call with transactionId: " + purchase.getPurchaseToken());',
+    'Log.d(TAG, "Resolving purchase call");',
+  );
+  if (next === beforeLogs || !next.includes('DIRECTION_LOG_REDACTION')) {
+    console.error('patch-native-purchases: purchase-token log redaction did not apply');
+    process.exit(1);
+  }
+}
+
+if (!next.includes('DIRECTION_SUBS_PRODUCT_TYPE')) {
+  next = next.replace(
+    'purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED && purchase.getProducts().get(0).contains("sub")',
+    'purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED && purchaseCall != null && "subs".equals(purchaseCall.getString("productType", "")) // DIRECTION_SUBS_PRODUCT_TYPE',
+  );
+  if (!next.includes('DIRECTION_SUBS_PRODUCT_TYPE')) {
+    console.error('patch-native-purchases: subscription productType patch did not apply');
+    process.exit(1);
+  }
+}
+
+const packageRoot = path.join(path.dirname(target), '..', '..', '..', '..', '..', '..', '..');
+const iosProduct = path.join(
+  packageRoot,
+  'ios',
+  'Sources',
+  'NativePurchasesPlugin',
+  'Product+CapacitorPurchasesPlugin.swift',
+);
+const iosPlugin = path.join(
+  path.dirname(iosProduct),
+  'NativePurchasesPlugin.swift',
+);
+
+function patchIosIntro(productSource) {
+  if (productSource.includes('DIRECTION_INTRO_OFFER')) return productSource;
+  const oldReturn = `        return [
+            "identifier": self.id,
+            "description": self.description,
+            "title": self.displayName,
+            "price": self.price,
+            "priceString": self.displayPrice,
+            "currencyCode": self.priceFormatStyle.currencyCode,
+            "isFamilyShareable": self.isFamilyShareable
+        ]`;
+  const newReturn = `        var result: [String: Any] = [
+            "identifier": self.id,
+            "description": self.description,
+            "title": self.displayName,
+            "price": self.price,
+            "priceString": self.displayPrice,
+            "currencyCode": self.priceFormatStyle.currencyCode,
+            "isFamilyShareable": self.isFamilyShareable
+        ]
+        // DIRECTION_INTRO_OFFER
+        if let subscription = self.subscription {
+            result["subscriptionPeriodUnit"] = directionPeriodUnit(subscription.subscriptionPeriod.unit)
+            result["subscriptionPeriodValue"] = subscription.subscriptionPeriod.value
+            if let intro = subscription.introductoryOffer {
+                result["introductoryPrice"] = [
+                    "price": intro.price,
+                    "priceString": intro.displayPrice,
+                    "paymentMode": directionPaymentMode(intro.paymentMode),
+                    "periodCount": intro.periodCount,
+                    "periodValue": intro.period.value,
+                    "periodUnit": directionPeriodUnit(intro.period.unit)
+                ]
+            }
+        }
+        return result`;
+  if (!productSource.includes(oldReturn)) {
+    console.error('patch-native-purchases: iOS product dictionary not found');
+    process.exit(1);
+  }
+  const helpers = `
+private func directionPeriodUnit(_ unit: Product.SubscriptionPeriod.Unit) -> String {
+    switch unit {
+    case .day: return "day"
+    case .week: return "week"
+    case .month: return "month"
+    case .year: return "year"
+    default: return "period"
+    }
+}
+
+private func directionPaymentMode(_ mode: Product.SubscriptionOffer.PaymentMode) -> String {
+    switch mode {
+    case .freeTrial: return "freeTrial"
+    case .payAsYouGo: return "payAsYouGo"
+    case .payUpFront: return "payUpFront"
+    default: return "other"
+    }
+}
+`;
+  return productSource.replace(oldReturn, newReturn) + helpers;
+}
+
+function patchIosEligibility(pluginSource) {
+  if (pluginSource.includes('DIRECTION_INTRO_ELIGIBILITY')) return pluginSource;
+  const oldMap = 'let productsJson: [[String: Any]] = products.map { $0.dictionary }';
+  const newMap = `var productsJson: [[String: Any]] = []
+                for product in products {
+                    var entry = product.dictionary
+                    if let subscription = product.subscription {
+                        // DIRECTION_INTRO_ELIGIBILITY
+                        entry["eligibleForIntroOffer"] = await subscription.isEligibleForIntroOffer
+                    }
+                    productsJson.append(entry)
+                }`;
+  if (!pluginSource.includes(oldMap)) {
+    console.error('patch-native-purchases: iOS getProducts map not found');
+    process.exit(1);
+  }
+  return pluginSource.replace(oldMap, newMap);
+}
+
+if (fs.existsSync(iosProduct)) {
+  const iosNext = patchIosIntro(fs.readFileSync(iosProduct, 'utf8'));
+  if (iosNext !== fs.readFileSync(iosProduct, 'utf8')) {
+    fs.writeFileSync(iosProduct, iosNext);
+    console.log('patch-native-purchases: patched Product+CapacitorPurchasesPlugin.swift');
+  }
+}
+if (fs.existsSync(iosPlugin)) {
+  const pluginNext = patchIosEligibility(fs.readFileSync(iosPlugin, 'utf8'));
+  if (pluginNext !== fs.readFileSync(iosPlugin, 'utf8')) {
+    fs.writeFileSync(iosPlugin, pluginNext);
+    console.log('patch-native-purchases: patched NativePurchasesPlugin.swift');
+  }
+}
+
+if (next === original) {
+  console.log('patch-native-purchases: already patched');
+  process.exit(0);
 }
 
 fs.writeFileSync(target, next);
