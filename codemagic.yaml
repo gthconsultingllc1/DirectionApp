@@ -50,9 +50,8 @@ workflows:
         submit_to_testflight: true
 
   # Manual only: no triggering block, so merging does not start this build.
-  # Signs with the same upload keystore used for direction-release.aab /
-  # direction-release-v3.aab (alias direction-upload). Upload that file in
-  # Codemagic as Android keystore reference "direction_upload".
+  # Signs with the current Play upload key: Codemagic Android keystore
+  # reference direction_upload, alias upload. Passwords stay in Codemagic.
   # Does not publish to Google Play.
   android-closed-testing:
     name: Direction Android closed testing
