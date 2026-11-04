@@ -324,10 +324,18 @@ if (!next.includes('DIRECTION_LOG_REDACTION')) {
   }
 }
 
-if (!next.includes('DIRECTION_SUBS_PRODUCT_TYPE')) {
+// A line comment here swallows the if-statement's closing paren. Keep the
+// marker in a block comment so the patched file still compiles.
+const subsProductType =
+  'purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED && purchaseCall != null && "subs".equals(purchaseCall.getString("productType", "")) /* DIRECTION_SUBS_PRODUCT_TYPE */';
+const brokenSubsProductType =
+  'purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED && purchaseCall != null && "subs".equals(purchaseCall.getString("productType", "")) // DIRECTION_SUBS_PRODUCT_TYPE';
+if (next.includes(brokenSubsProductType)) {
+  next = next.replace(brokenSubsProductType, subsProductType);
+} else if (!next.includes('DIRECTION_SUBS_PRODUCT_TYPE')) {
   next = next.replace(
     'purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED && purchase.getProducts().get(0).contains("sub")',
-    'purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED && purchaseCall != null && "subs".equals(purchaseCall.getString("productType", "")) // DIRECTION_SUBS_PRODUCT_TYPE',
+    subsProductType,
   );
   if (!next.includes('DIRECTION_SUBS_PRODUCT_TYPE')) {
     console.error('patch-native-purchases: subscription productType patch did not apply');
@@ -444,6 +452,17 @@ if (fs.existsSync(iosPlugin)) {
     console.log('patch-native-purchases: patched NativePurchasesPlugin.swift');
   }
 }
+
+// putDirectionSubscriptionPrice() removes the local `price` variable, but the
+// plugin still logs it. Only the subscription logs (the ones next to
+// firstPricingPhase) are broken; in-app logs still have their own variable.
+function repairSubscriptionPriceLog(source, indent) {
+  const broken = `${indent}Log.d(TAG, "Price: " + price);\n${indent}Log.d(TAG, "Formatted price: " + firstPricingPhase.getFormattedPrice());`;
+  const repaired = `${indent}Log.d(TAG, "Price: " + firstPricingPhase.getFormattedPrice());\n${indent}Log.d(TAG, "Formatted price: " + firstPricingPhase.getFormattedPrice());`;
+  return source.split(broken).join(repaired);
+}
+next = repairSubscriptionPriceLog(next, '                            ');
+next = repairSubscriptionPriceLog(next, '                                    ');
 
 if (next === original) {
   console.log('patch-native-purchases: already patched');

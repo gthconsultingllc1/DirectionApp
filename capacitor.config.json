@@ -17,9 +17,14 @@
       "*.apple.com"
     ]
   },
+  "ios": {
+    "backgroundColor": "#0a0a0a",
+    "contentInset": "never"
+  },
   "android": {
     "allowMixedContent": false,
-    "backgroundColor": "#0a0a0a"
+    "backgroundColor": "#0a0a0a",
+    "adjustMarginsForEdgeToEdge": "auto"
   },
   "plugins": {
     "SplashScreen": {

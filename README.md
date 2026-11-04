@@ -8,11 +8,11 @@ Native Android shell that loads **https://app.mydirection.app** in a fullscreen 
 | App label | Direction |
 | Capacitor | 7.x |
 | Web target | `https://app.mydirection.app` |
-| Allowed nav | `app.mydirection.app` + mydirection.app, Supabase (`mqwayjaefnygtjqgdwxq.supabase.co`, `*.supabase.co`), Google OAuth (`accounts.google.com`, `*.google.com`, `*.googleusercontent.com`), Sign in with Apple (`appleid.apple.com`, `*.apple.com`) |
+| Allowed nav | `app.mydirection.app` + mydirection.app, Supabase (`mqwayjaefnygtjqgdwxq.supabase.co`, `*.supabase.co`), Google (`accounts.google.com`, `*.google.com`, `*.googleusercontent.com`), Apple (`appleid.apple.com`, `*.apple.com`). Google and Apple sign-in must use `window.DirectionAuth`, not a navigation inside this WebView. |
 | Min / target SDK | 23 / 36 |
 | Release AAB | [`direction-release.aab`](./direction-release.aab) |
 | Android version | `versionName` 1.1 / `versionCode` 7 |
-| iOS version | marketing 1.1 / build 6 |
+| iOS version | marketing 1.1 / build 7 |
 
 ## Subscriptions (Play Billing + StoreKit)
 
@@ -72,7 +72,108 @@ async function whenDirectionIAP() {
 }
 ```
 
-After changing `www/direction-iap.js`, run `npx cap sync` so the script is copied into the Android and iOS bundles. The projects currently set Android `versionCode` 7 (`versionName` 1.1) and iOS build 6 (marketing 1.1). Play already used versionCode 3, rejected a later upload because versionCode 4 existed as versionName 1.0, and the repo has since moved to 7. The next store upload must be higher than whatever Play and App Store Connect already show. `ITSAppUsesNonExemptEncryption` is false because Direction only uses exempt HTTPS. In Play Console, license testers must install from the testing track. In App Store Connect, the In-App Purchase capability is recorded on the Xcode target; sign a sandbox tester in when the purchase sheet appears.
+After changing `www/direction-iap.js` or `www/direction-auth.js`, run `npx cap sync` so the scripts are copied into the Android and iOS bundles.
+
+## Sign-in (Google and Apple)
+
+Google rejects OAuth inside an embedded WebView (`disallowed_useragent`). Sign in with Apple's web redirect also does not reliably return to this WKWebView. The shell therefore exposes `window.DirectionAuth`, injected at document start the same way as `window.DirectionIAP`. The WebView must not navigate to `accounts.google.com` or `appleid.apple.com`.
+
+| | Value |
+|--|--|
+| Callback | `com.gthconsulting.direction://auth/callback` (`DirectionAuth.redirectUrl`) |
+| iOS Apple | `AuthenticationServices` identity token. Web app calls `supabase.auth.signInWithIdToken`. |
+| Google, and Apple on Android | System browser (`ASWebAuthenticationSession` on iOS, Chrome Custom Tabs on Android). Web app calls `supabase.auth.signInWithOAuth` with `skipBrowserRedirect: true`, then `exchangeCodeForSession` in this same WebView. |
+| Supabase project | `mqwayjaefnygtjqgdwxq` |
+
+`createClient` must use `auth.flowType: 'pkce'` (the supabase-js v2 default). The code verifier is stored when `signInWithOAuth` runs, so `exchangeCodeForSession` has to run in the same WebView. Do not load the callback URL in the WebView. `detectSessionInUrl` does not see a custom-scheme callback.
+
+The native Apple nonce is the raw string returned as `apple.nonce`. The shell already sends Apple the lowercase hex SHA-256 of that string. Pass `apple.nonce` through unchanged. Apple only returns `givenName` / `familyName` on the first authorization; save them with `updateUser` when they are present.
+
+```javascript
+async function whenDirectionAuth() {
+  if (window.DirectionAuth) return window.DirectionAuth;
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      if (!window.DirectionAuth) return;
+      clearInterval(timer);
+      resolve(window.DirectionAuth);
+    }, 50);
+    window.addEventListener('direction-auth-ready', () => {
+      clearInterval(timer);
+      resolve(window.DirectionAuth);
+    }, { once: true });
+  });
+}
+
+const redirectTo = window.DirectionAuth.redirectUrl;
+
+async function signInWithApple() {
+  const auth = window.DirectionAuth;
+  if (auth && auth.isAvailable() && auth.platform === 'ios') {
+    const apple = await auth.signInWithApple();
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: apple.idToken,
+      nonce: apple.nonce,
+    });
+    if (error) throw error;
+    const fullName = [apple.givenName, apple.familyName].filter(Boolean).join(' ');
+    if (fullName) {
+      await supabase.auth.updateUser({
+        data: {
+          full_name: fullName,
+          given_name: apple.givenName,
+          family_name: apple.familyName,
+        },
+      });
+    }
+    return data;
+  }
+  return signInWithProvider('apple');
+}
+
+async function signInWithGoogle() {
+  return signInWithProvider('google');
+}
+
+async function signInWithProvider(provider) {
+  const auth = window.DirectionAuth;
+  if (!auth || !auth.isAvailable()) {
+    return supabase.auth.signInWithOAuth({ provider });
+  }
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: auth.redirectUrl, skipBrowserRedirect: true },
+  });
+  if (error) throw error;
+  const callback = await auth.startOAuth({ url: data.url, provider });
+  // auth.signInWithGoogle({ url: data.url }) is the same call for Google.
+  if (callback.accessToken && callback.refreshToken) {
+    return supabase.auth.setSession({
+      access_token: callback.accessToken,
+      refresh_token: callback.refreshToken,
+    });
+  }
+  const flowId = callback.flowId || data.flowId;
+  if (flowId) {
+    return supabase.auth.exchangeCodeForSession(callback.code, { flowId });
+  }
+  return supabase.auth.exchangeCodeForSession(callback.code);
+}
+```
+
+Cancellation rejects with `error.code === 'USER_CANCELED'`. A missing bridge rejects with `UNAVAILABLE`. Android `signInWithApple()` rejects with `APPLE_NATIVE_IOS_ONLY`; use `startOAuth` there.
+
+On iOS the WebView is laid out inside the safe area, so web content cannot sit under the status bar or home indicator, and `env(safe-area-inset-top)` is 0 inside the app. Do not add a second status-bar spacer when `DirectionAuth` is present. The Account header's Sign in control still has to stay on one line in the web app (`white-space: nowrap; flex-shrink: 0`). Android 15+ uses Capacitor's `adjustMarginsForEdgeToEdge: "auto"`; older Android versions are unchanged.
+
+Console setup before the next iOS build:
+
+1. Supabase Auth URL configuration: add redirect `com.gthconsulting.direction://auth/callback`.
+2. Supabase Apple provider Client IDs: keep the existing Services ID first, then add `com.gthconsulting.direction`. Native tokens use the bundle id as `aud`. A bundle id listed first makes Apple reject the web Services ID flow.
+3. Apple Developer App ID `com.gthconsulting.direction`: enable Sign in with Apple, then refresh the App Store provisioning profile. The target entitlements file requests `com.apple.developer.applesignin`. No new Services ID is required if the website one already uses `https://mqwayjaefnygtjqgdwxq.supabase.co/auth/v1/callback`.
+4. Google Cloud: do not create an iOS client for this flow. The system browser uses the existing Supabase Google web client. Its authorized redirect stays `https://mqwayjaefnygtjqgdwxq.supabase.co/auth/v1/callback`. If the consent screen is in Testing, App Review's Google account must be a test user, or the client must be published.
+
+This repo does not submit to App Store Connect or Play. The projects currently set Android `versionCode` 7 (`versionName` 1.1) and iOS build 7 (marketing 1.1). Play already used versionCode 3, rejected a later upload because versionCode 4 existed as versionName 1.0, and the repo has since moved to 7. The next store upload must be higher than whatever Play and App Store Connect already show. `ITSAppUsesNonExemptEncryption` is false because Direction only uses exempt HTTPS. In Play Console, license testers must install from the testing track. In App Store Connect, the In-App Purchase capability is recorded on the Xcode target; sign a sandbox tester in when the purchase sheet appears.
 
 ## What this is
 
@@ -94,9 +195,9 @@ Also available at the Gradle output path:
 android/app/build/outputs/bundle/release/app-release.aab
 ```
 
-Release AABs are signed with the upload keystore. The keystore file stays out of git (`*.keystore` is ignored). Passwords are not in this repo.
+Release AABs are signed with the current Play upload key. The keystore file is not in git. Its alias is `upload`, and Codemagic manages it as the Android keystore reference `direction_upload`. The store password and the key password are kept in Codemagic's code-signing settings and in the owner's secure storage. They are not written in this repo.
 
-A password used to be committed in `android/app/build.gradle` and this README. It is still in git history. Treat that upload key as exposed and decide in Play Console whether to reset it. This change does not rewrite history.
+An older upload key, alias `direction-upload`, was retired with a Play upload key reset. A password for that retired key was committed in `android/app/build.gradle` and this README and is still in git history. Do not use the retired key. This change does not rewrite history.
 
 ### Release signing variables
 
@@ -106,24 +207,24 @@ A password used to be committed in `android/app/build.gradle` and this README. I
 |--|--|--|
 | Keystore file | `CM_KEYSTORE_PATH` | `DIRECTION_KEYSTORE_PATH` |
 | Keystore password | `CM_KEYSTORE_PASSWORD` | `DIRECTION_KEYSTORE_PASSWORD` |
-| Key alias | `CM_KEY_ALIAS` | `DIRECTION_KEY_ALIAS` |
+| Key alias | `CM_KEY_ALIAS` (`upload`) | `DIRECTION_KEY_ALIAS` |
 | Key password | `CM_KEY_PASSWORD` | `DIRECTION_KEY_PASSWORD` |
 
-Codemagic injects the `CM_*` variables when the Android keystore reference `direction_upload` is selected. Put the keystore file and passwords in Codemagic, not in git.
+Codemagic injects the `CM_*` variables when the Android keystore reference `direction_upload` is selected. The passwords stay in Codemagic's code-signing settings and the owner's secure storage.
 
 ## Codemagic Android closed testing
 
-`direction-release.aab` and `direction-release-v3.aab` (Play versionCode 3) were built on a machine that had `android/direction-upload.keystore`, with `./gradlew bundleRelease`. That keystore is gitignored, so this repo cannot sign a Play AAB by itself. Workflow `android-closed-testing` in `codemagic.yaml` repeats that local release build and signs with the same upload key. It has no `triggering` events, so it starts only when you start it. It does not upload to Play.
+Earlier Play AABs were signed with the retired upload key. Workflow `android-closed-testing` in `codemagic.yaml` builds a release AAB and signs it with the current upload key: Codemagic reference `direction_upload`, alias `upload`. It has no `triggering` events, so it starts only when you start it. It does not upload to Play. This repo cannot sign a Play AAB by itself.
 
-Add the keystore once in Codemagic (Team settings → Code signing identities → Android keystores):
+The upload key is stored in Codemagic (Team settings → Code signing identities → Android keystores), not in git:
 
 | Codemagic field | Value |
 |-----------------|--------|
 | Reference name | `direction_upload` |
-| Keystore file | the upload keystore used for earlier Play uploads (not committed) |
-| Keystore password | stored only in Codemagic, exported as `CM_KEYSTORE_PASSWORD` |
-| Key alias | stored only in Codemagic, exported as `CM_KEY_ALIAS` |
-| Key password | stored only in Codemagic, exported as `CM_KEY_PASSWORD` |
+| Keystore file | the current upload keystore (not committed) |
+| Keystore password | kept in Codemagic's code-signing settings and the owner's secure storage |
+| Key alias | `upload` |
+| Key password | kept in Codemagic's code-signing settings and the owner's secure storage |
 
 Start the versionCode 7 / versionName 1.1 closed-testing AAB:
 
@@ -184,7 +285,7 @@ cd android && ./gradlew assembleRelease
 # → app/build/outputs/apk/release/app-release.apk
 ```
 
-Bump Play version: edit `versionCode` / `versionName` in `android/app/build.gradle` → `defaultConfig`. The project is `versionName` 1.1 / `versionCode` 7. iOS marketing version and build are `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` (1.1 / 6). `ios/App/App/Info.plist` sets `ITSAppUsesNonExemptEncryption` to false and `NSMicrophoneUsageDescription`. `ios/App/App/PrivacyInfo.xcprivacy` declares email, audio, and purchase history, with tracking off.
+Bump Play version: edit `versionCode` / `versionName` in `android/app/build.gradle` → `defaultConfig`. The project is `versionName` 1.1 / `versionCode` 7. iOS marketing version and build are `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` (1.1 / 7). `ios/App/App/Info.plist` sets `ITSAppUsesNonExemptEncryption` to false and `NSMicrophoneUsageDescription`. `ios/App/App/PrivacyInfo.xcprivacy` declares email, audio, and purchase history, with tracking off.
 
 ## Google Play upload notes
 
@@ -208,7 +309,10 @@ This repo does **not** upload to Play; leave the AAB for manual Console upload.
 - `appId`: `com.gthconsulting.direction`
 - `appName`: `Direction`
 - `server.url`: `https://app.mydirection.app`
-- `server.allowNavigation`: `app.mydirection.app` and mydirection.app, plus the Supabase / Google / Apple hosts required for in-WebView OAuth
+- `server.allowNavigation`: `app.mydirection.app` and mydirection.app, plus Supabase / Google / Apple hosts. Sign-in itself uses `window.DirectionAuth` and the system browser, not a WebView navigation.
+- `ios.contentInset`: `never`. The view controller sizes the WebView to the safe area instead, so a scroll-view inset would pad twice.
+- `ios.backgroundColor`: `#0a0a0a` (also the safe-area gap behind the status bar)
+- `android.adjustMarginsForEdgeToEdge`: `auto` (insets the WebView only when Android 15+ forces edge-to-edge)
 - Dark splash via SplashScreen plugin + `#0a0a0a` background
 
 ## Project layout
@@ -221,8 +325,7 @@ direction-native/
   direction-release.aab   # local upload-ready bundle (gitignored; not in CI)
   codemagic.yaml          # ios-testflight + android-closed-testing
   android/                # Capacitor Android project
-    direction-upload.keystore
-    app/build.gradle      # applicationId + signing
+    app/build.gradle      # applicationId + signing; upload key is Codemagic direction_upload, alias upload
     local.properties      # sdk.dir (machine-local)
 ```
 
