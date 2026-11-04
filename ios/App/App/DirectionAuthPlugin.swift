@@ -72,11 +72,11 @@ public class DirectionAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationCo
         }
     }
 
-    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+    public func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         return presentationWindow()
     }
 
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+    public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         return presentationWindow()
     }
 
